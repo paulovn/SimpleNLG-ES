@@ -5,9 +5,10 @@ package simplenlg.xmlrealiser;
 
 import simplenlg.framework.DocumentElement;
 import simplenlg.framework.NLGElement;
+import simplenlg.framework.Language;
 import simplenlg.lexicon.Lexicon;
 import simplenlg.lexicon.NIHDBLexicon;
-import simplenlg.realiser.english.Realiser;
+import simplenlg.realiser.Realiser;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -21,6 +22,9 @@ import java.io.StringReader;
  */
 public class XMLRealiser {
 
+        /** language to use */
+        static Language lang = null;
+        
 	/** The lex db. */
 	static String lexDB = null;
 
@@ -121,6 +125,17 @@ public class XMLRealiser {
 		return output;
 	}
 
+        /**
+	 * Sets the language.
+	 *
+	 * @param newLang
+	 *            the language
+	 */
+	public static void setLang(Language newLang) {
+                lang = newLang;
+	}
+        
+        
 	/**
 	 * Sets the lexicon.
 	 *
@@ -204,7 +219,9 @@ public class XMLRealiser {
 				UnWrapper w = new UnWrapper(lexicon);
 				DocumentElement t = w.UnwrapDocumentElement(wt);
 				if (t != null) {
-					Realiser r = new Realiser(lexicon);
+					Realiser r = (lang == Language.SPANISH) 
+                                                ? new simplenlg.realiser.spanish.Realiser(lexicon)
+                                                : new simplenlg.realiser.english.Realiser(lexicon);
 					r.initialise();
 
 					NLGElement tr = r.realise(t);

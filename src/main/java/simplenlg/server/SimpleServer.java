@@ -20,6 +20,7 @@
 package simplenlg.server;
 
 import simplenlg.lexicon.NIHDBLexicon;
+import simplenlg.lexicon.XMLLexicon;
 import simplenlg.xmlrealiser.XMLRealiser;
 
 import java.io.*;
@@ -27,7 +28,12 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.Properties;
+import simplenlg.framework.Language;
+
 
 /**
  * SimpleServer is a program that realises xml requests.
@@ -48,7 +54,8 @@ import java.util.Properties;
  */
 public class SimpleServer implements Runnable {
 
-    /**
+  
+/**
      * Set to true to enable printing debug messages.
      */
     static boolean DEBUG = false;
@@ -68,24 +75,58 @@ public class SimpleServer implements Runnable {
      * 
      * @param port
      *      the port on which to listen
+     * @param lang
+     *       language to instantiate
      *      
      * @throws IOException
      */
-    public SimpleServer(int port) throws IOException {
-        startServer(new ServerSocket(port, 8));
+    public SimpleServer(int port, String lang) throws IOException {
+        startServer(new ServerSocket(port, 8), lang);
     }
    
+    public SimpleServer(int port) throws IOException {
+        startServer(new ServerSocket(port, 8), null);
+    }
+  
     /**
      * Construct a server with a pre-allocated socket.
      * @param socket
      * @throws IOException
      */
     public SimpleServer(ServerSocket socket) throws IOException {
-    	startServer(socket);
+    	startServer(socket, null);
     }
 
     static void print(Object o) {
         System.out.println(o);
+    }
+
+    // get file from classpath, resources folder
+    private InputStream getResourceAsStream(String fileName) {
+
+        ClassLoader classLoader = getClass().getClassLoader();
+
+        InputStream inputStream = classLoader.getResourceAsStream(fileName);
+        if (inputStream == null)
+            throw new IllegalArgumentException("file is not found: " + fileName);
+        return inputStream;
+    }
+    
+    // get file from classpath, resources folder
+    private URI getResourceAsURI(String fileName) {
+
+        ClassLoader classLoader = getClass().getClassLoader();
+
+        URL uri = classLoader.getResource(fileName);
+        if (uri == null)
+            throw new IllegalArgumentException("file is not found: " + fileName);
+        
+        try {
+          return uri.toURI();
+        } catch( URISyntaxException e ) {
+          e.printStackTrace();
+          return null;
+        }
     }
 
     /**
@@ -107,9 +148,11 @@ public class SimpleServer implements Runnable {
         } catch (Exception e) {
             port = 50007;
         }
+        String lang = args.length > 1 ? args[1] : null;
+          
 
         try {
-            SimpleServer serverapp = new SimpleServer(port);
+            SimpleServer serverapp = new SimpleServer(port, lang);
 
             Thread server = new Thread(serverapp);
             server.setDaemon(true);
@@ -141,12 +184,12 @@ public class SimpleServer implements Runnable {
     }
 
 	/**
-	 * startServer -- Start's the SimpleServer with a created ServerSocket.
+	 * startServer -- Starts the SimpleServer with a created ServerSocket.
 	 * @param socket -- The socket for the server to use.
 	 * @throws IOException
 	 * @throws SocketException
 	 */
-	private void startServer(ServerSocket socket) throws IOException, SocketException {
+	private void startServer(ServerSocket socket, String lang) throws IOException, SocketException {
 		serverSocket = socket;
         serverSocket.setReuseAddress(true);
         serverSocket.setSoTimeout(0);
@@ -156,23 +199,50 @@ public class SimpleServer implements Runnable {
         // try to read the lexicon path from lexicon.properties file
         try {
             Properties prop = new Properties();
-            FileReader reader = new FileReader(new File("./src/main/resources/lexicon.properties"));
+            
+            InputStream reader = getResourceAsStream("lexicon.properties");
             prop.load(reader);
 
-            String dbFile = prop.getProperty("DB_FILENAME");
-
+            if( lang == null )
+              lang = prop.getProperty("DefaultLanguage");
+            
+            String dbType = prop.getProperty("LexiconType");
+            String fileProperty = dbType.equals("XML") ? "XML_FILENAME_"+lang: "DB_FILENAME_"+lang;
+            
+            String dbFile = prop.getProperty(fileProperty);
             if (null != dbFile)
                 lexiconPath = dbFile;
             else
                 throw new Exception("No DB_FILENAME in lexicon.properties");
+            
+            System.out.println("Configuration: language=" + lang
+                    + " LexiconType=" + dbType
+                    + " lexiconPath=" + lexiconPath);
+
+            
+            if( dbType.equals("NIH")) {
+              XMLRealiser.setLexicon(new NIHDBLexicon(this.lexiconPath));
+            } else {
+              URI lexiconUri = getResourceAsURI(this.lexiconPath);
+              if( "es".equalsIgnoreCase(lang) ) {
+                XMLLexicon lexicon = new simplenlg.lexicon.spanish.XMLLexicon(lexiconUri);
+                XMLRealiser.setLexicon(lexicon);
+                XMLRealiser.setLang(Language.SPANISH);
+              }
+              else {
+                XMLLexicon lexicon = new simplenlg.lexicon.english.XMLLexicon(lexiconUri);
+                XMLRealiser.setLexicon(lexicon);
+                XMLRealiser.setLang(Language.ENGLISH);
+              }
+            }
+    
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         System.out.println("Server is using the following lexicon: "
                            + lexiconPath);
-
-        XMLRealiser.setLexicon(new NIHDBLexicon(this.lexiconPath));
+        
     }
 
     /**

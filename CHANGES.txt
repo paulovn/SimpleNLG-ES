@@ -1,0 +1,7 @@
+
+2019-10-27
+ * SimpleServer modified to allow language specification
+     - via an additional command-line input
+     - in properties file
+ * XMLRealiser modified to allow language selection
+ * POM file modified to add an entry point to make the jar executable
